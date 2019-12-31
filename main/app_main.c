@@ -48,7 +48,7 @@
 #define ID_SLAVE_STOP_RESP              0x0B0
 #define ID_SLAVE_DATA                   0x0B1
 #define ID_SLAVE_PING_RESP              0x0B2
-#define QUEUE_SIZE_CAN              40
+#define QUEUE_SIZE_CAN              20
 xQueueHandle can_queue;
 typedef struct 
    {
@@ -137,19 +137,26 @@ esp_err_t hello_get_handler(httpd_req_t *req)
     /* Send response with custom headers and body set as the
      * string passed in user context*/
 char* string_final;
-string_final = malloc(QUEUE_SIZE_CAN *100);
+string_final = malloc(QUEUE_SIZE_CAN *300);
 char str[30];         // temporary string holder
 
 string_final[0] = '\0';      // clean up the string_final
-sprintf( str, "{ \"messages\" : [");            strcat( string_final, str);
+sprintf( str, "{ \"messages\" : [ \n");            strcat( string_final, str);
      can_with_id *message[QUEUE_SIZE_CAN];
     for (size_t i = 0; i < QUEUE_SIZE_CAN; i++)
     {
      if(xQueueReceive(can_queue,&message[i], 0 ) != 0){
 sprintf( str, "{ \"#\": %d", message[i]->x );        strcat( string_final, str);
 sprintf( str, ",\"ID\": %d", message[i]->message.identifier );        strcat( string_final, str);
-sprintf( str, ",\"data0\" : %u", message[i]->message.data[0]);   strcat( string_final, str);
-sprintf( str, ",\"data1\" : %u }\n", message[i]->message.data[1]);   strcat( string_final, str);
+sprintf( str, ",\"length\": %u", message[i]->message.data_length_code );        strcat( string_final, str);
+for (uint8_t j = 0; j < message[i]->message.data_length_code; j++)
+{
+sprintf( str, ",\"data%u\" : %u", j, message[i]->message.data[j]);   strcat( string_final, str);
+    
+}
+sprintf( str, "}\n");   strcat( string_final, str);
+
+
 if (i != (QUEUE_SIZE_CAN-1)){
 sprintf( str, ",");   strcat( string_final, str);
 }
