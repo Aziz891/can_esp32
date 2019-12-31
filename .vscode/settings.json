@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "stdio.h": "c",
+        "freertos.h": "c",
+        "esp_spi_flash.h": "c"
+    },
+    "python.pythonPath": "C:\\Users\\aziza\\.espressif\\python_env\\idf3.3_py3.8_env\\Scripts\\python.exe",
+    "git.enabled": true
+    
+}

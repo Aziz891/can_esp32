@@ -1,0 +1,19 @@
+{
+    "configurations": [
+        {
+            "name": "ESP32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "C:\\Users\\aziza\\esp-idf\\components\\**"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "intelliSenseMode": "${default}",
+            "compilerPath": "C:\\Users\\aziza\\.espressif\\tools\\xtensa-esp32-elf\\1.22.0-80-g6c4433a5-5.2.0\\xtensa-esp32-elf\\bin\\xtensa-esp32-elf-gcc.exe"
+        }
+    ],
+    "version": 4
+}
