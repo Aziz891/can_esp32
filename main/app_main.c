@@ -56,10 +56,10 @@ typedef struct
    can_message_t message;    
    } can_with_id;
 
-static const can_filter_config_t f_config = CAN_FILTER_CONFIG_ACCEPT_ALL();
+static const can_filter_config_t f_config =  {.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFF007, .single_filter = true};
 static const can_timing_config_t t_config = CAN_TIMING_CONFIG_500KBITS();;
 //Set TX queue length to 0 due to listen only mode
-static const can_general_config_t g_config = CAN_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, CAN_MODE_LISTEN_ONLY);
+static const can_general_config_t g_config = CAN_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, CAN_MODE_NORMAL);
 
 static SemaphoreHandle_t rx_sem;
 
@@ -442,6 +442,43 @@ pmessage = message_struct;
     
 }
 
+static void can_send_task(void *arg)
+{
+
+   
+  can_message_t tx_message;
+  tx_message.identifier = 0x7DF;
+  tx_message.data[0] = 2;
+  tx_message.data[1] = 1;
+  tx_message.data[2] = 12;
+  tx_message.data_length_code = 8;
+  
+
+
+while(1){
+
+    can_transmit( &tx_message, pdMS_TO_TICKS(100));
+
+
+    
+    
+    
+
+
+
+
+
+
+ 
+    
+      ESP_LOGI(TAG, "sent OBD query");
+    vTaskDelay(1 / portTICK_PERIOD_MS);
+  
+}
+    
+    
+}
+
 void app_main()
 {
 
@@ -449,6 +486,7 @@ void app_main()
    
     can_queue=  xQueueCreate(QUEUE_SIZE_CAN, sizeof(can_with_id*) );
     xTaskCreatePinnedToCore(can_receive_task, "CAN_rx", 4096, NULL, RX_TASK_PRIO, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(can_send_task, "CAN_tx", 4096, NULL, RX_TASK_PRIO, NULL, tskNO_AFFINITY);
 
     //Install and start CAN driver
     ESP_ERROR_CHECK(can_driver_install(&g_config, &t_config, &f_config));
