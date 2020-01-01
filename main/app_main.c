@@ -48,7 +48,7 @@
 #define ID_SLAVE_STOP_RESP              0x0B0
 #define ID_SLAVE_DATA                   0x0B1
 #define ID_SLAVE_PING_RESP              0x0B2
-#define QUEUE_SIZE_CAN              20
+#define QUEUE_SIZE_CAN              10
 xQueueHandle can_queue;
 typedef struct 
    {
@@ -56,7 +56,7 @@ typedef struct
    can_message_t message;    
    } can_with_id;
 
-static const can_filter_config_t f_config =  {.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFF007, .single_filter = true};
+static const can_filter_config_t f_config =  {.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFF00F, .single_filter = true};
 static const can_timing_config_t t_config = CAN_TIMING_CONFIG_500KBITS();;
 //Set TX queue length to 0 due to listen only mode
 static const can_general_config_t g_config = CAN_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, CAN_MODE_NORMAL);
@@ -417,9 +417,15 @@ if (test == ESP_OK){
   
     count++;
     pmessage->x = count;
+    if (message_struct[i].message.identifier == (uint32_t) 2024U)
+    {
+        ESP_LOGI(TAG,"---------- %d", message_struct[i].message.identifier);
+        /* code */
+    }
+    
 
 xQueueSend(can_queue, &pmessage, 100);
-// ESP_LOGI(TAG,"%d", pmessage->x);
+
   
 }
 pmessage++;
@@ -446,33 +452,20 @@ static void can_send_task(void *arg)
 {
 
    
-  can_message_t tx_message;
-  tx_message.identifier = 0x7DF;
-  tx_message.data[0] = 2;
-  tx_message.data[1] = 1;
-  tx_message.data[2] = 12;
-  tx_message.data_length_code = 8;
-  
+  static can_message_t tx_message;
+  tx_message.identifier = (uint32_t) 0x7E8U;
+  tx_message.data[0] = (uint8_t) 2U;
+  tx_message.data[1] = (uint8_t) 01U;
+  tx_message.data[2] = (uint8_t) 11U;
+  tx_message.data_length_code = (uint8_t) 8U;
+  esp_err_t test;
 
 
 while(1){
 
-    can_transmit( &tx_message, pdMS_TO_TICKS(100));
-
-
-    
-    
-    
-
-
-
-
-
-
- 
-    
-      ESP_LOGI(TAG, "sent OBD query");
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    test = can_transmit( &tx_message, pdMS_TO_TICKS(100));
+      ESP_LOGI(TAG, "sent OBD query %d ", test);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
   
 }
     
