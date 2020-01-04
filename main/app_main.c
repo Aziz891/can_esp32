@@ -48,7 +48,9 @@
 #define ID_SLAVE_STOP_RESP              0x0B0
 #define ID_SLAVE_DATA                   0x0B1
 #define ID_SLAVE_PING_RESP              0x0B2
-#define QUEUE_SIZE_CAN              10
+#define QUEUE_SIZE_CAN              100
+#define QUEUE_SIZE_SCALE              100
+#define QUEUE_SIZE_RX              50
 xQueueHandle can_queue;
 typedef struct 
    {
@@ -56,16 +58,16 @@ typedef struct
    can_message_t message;    
    } can_with_id;
 
-static const can_filter_config_t f_config =  {.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFF00F, .single_filter = true};
+static const can_filter_config_t f_config =  CAN_FILTER_CONFIG_ACCEPT_ALL();//{.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFFFFF, .single_filter = true};
 static const can_timing_config_t t_config = CAN_TIMING_CONFIG_500KBITS();;
 //Set TX queue length to 0 due to listen only mode
-static const can_general_config_t g_config = CAN_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, CAN_MODE_NORMAL);
+static const can_general_config_t g_config =  {.mode = CAN_MODE_NORMAL, .tx_io = 21, .rx_io = 22, .clkout_io = CAN_IO_UNUSED, .bus_off_io = CAN_IO_UNUSED, .tx_queue_len = 5, .rx_queue_len = 500, .alerts_enabled =  0x0400 , .clkout_divider = 0, };   // CAN_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, CAN_MODE_NORMAL);
 
 static SemaphoreHandle_t rx_sem;
 
 /* --------------------------- Tasks and Functions -------------------------- */
 
-#define EXAMPLE_WIFI_SSID "ESP32"
+#define EXAMPLE_WIFI_SSID "Abdulaziz_2.4G"
 #define EXAMPLE_WIFI_PASS "0504153443"
 
 static const char *TAG="APP";
@@ -75,6 +77,7 @@ static const char *TAG="APP";
 /* An HTTP GET handler */
 esp_err_t hello_get_handler(httpd_req_t *req)
 {
+     xSemaphoreTake(rx_sem, portMAX_DELAY);
     char*  buf;
     size_t buf_len;
 
@@ -137,27 +140,27 @@ esp_err_t hello_get_handler(httpd_req_t *req)
     /* Send response with custom headers and body set as the
      * string passed in user context*/
 char* string_final;
-string_final = malloc(QUEUE_SIZE_CAN *300);
+string_final = malloc(QUEUE_SIZE_SCALE *300);
 char str[30];         // temporary string holder
 
 string_final[0] = '\0';      // clean up the string_final
 sprintf( str, "{ \"messages\" : [ \n");            strcat( string_final, str);
-     can_with_id *message[QUEUE_SIZE_CAN];
-    for (size_t i = 0; i < QUEUE_SIZE_CAN; i++)
+     can_with_id message[QUEUE_SIZE_SCALE];
+    for (size_t i = 0; i < QUEUE_SIZE_SCALE; i++)
     {
      if(xQueueReceive(can_queue,&message[i], 0 ) != 0){
-sprintf( str, "{ \"#\": %d", message[i]->x );        strcat( string_final, str);
-sprintf( str, ",\"ID\": %d", message[i]->message.identifier );        strcat( string_final, str);
-sprintf( str, ",\"length\": %u", message[i]->message.data_length_code );        strcat( string_final, str);
-for (uint8_t j = 0; j < message[i]->message.data_length_code; j++)
+sprintf( str, "{ \"#\": %d", message[i].x );        strcat( string_final, str);
+sprintf( str, ",\"ID\": %d", message[i].message.identifier );        strcat( string_final, str);
+sprintf( str, ",\"length\": %u", message[i].message.data_length_code );        strcat( string_final, str);
+for (uint8_t j = 0; j < message[i].message.data_length_code; j++)
 {
-sprintf( str, ",\"data%u\" : %u", j, message[i]->message.data[j]);   strcat( string_final, str);
+sprintf( str, ",\"data%u\" : %u", j, message[i].message.data[j]);   strcat( string_final, str);
     
 }
 sprintf( str, "}\n");   strcat( string_final, str);
 
 
-if (i != (QUEUE_SIZE_CAN-1)){
+if (i != (QUEUE_SIZE_SCALE-1)){
 sprintf( str, ",");   strcat( string_final, str);
 }
 
@@ -187,6 +190,7 @@ sprintf( str, "]}");            strcat( string_final, str);
     if (httpd_req_get_hdr_value_len(req, "Host") == 0) {
         ESP_LOGI(TAG, "Request headers lost");
     }
+     xSemaphoreGive(rx_sem);
     return ESP_OK;
 }
 
@@ -311,7 +315,10 @@ httpd_uri_t ctrl = {
 httpd_handle_t start_webserver(void)
 {
     httpd_handle_t server = NULL;
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    httpd_config_t config = { .task_priority = tskIDLE_PRIORITY+5, .stack_size = 1024*QUEUE_SIZE_SCALE, .server_port = 80, .ctrl_port = 32768,\
+     .max_open_sockets = 7, .max_uri_handlers = 8, .max_resp_headers = 8, .backlog_conn = 5, .lru_purge_enable = false, .recv_wait_timeout = 5,\
+      .send_wait_timeout = 5, .global_user_ctx = NULL, .global_user_ctx_free_fn = NULL, .global_transport_ctx = NULL, .global_transport_ctx_free_fn = NULL,\
+       .open_fn = NULL, .close_fn = NULL, .uri_match_fn = NULL };
 
     // Start the httpd server
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -343,10 +350,10 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
         ESP_LOGI(TAG, "SYSTEM_EVENT_STA_START");
         ESP_ERROR_CHECK(esp_wifi_connect());
         break;
-    case SYSTEM_EVENT_AP_STACONNECTED:
+    case SYSTEM_EVENT_STA_GOT_IP:
         ESP_LOGI(TAG, "STA CONNECTED, STARTING WEB SERVER");
-        // ESP_LOGI(TAG, "Got IP: '%s'",
-        //         ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
+        ESP_LOGI(TAG, "Got IP: '%s'",
+                ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
 
         /* Start the web server */
         if (*server == NULL) {
@@ -377,61 +384,72 @@ static void initialise_wifi(void *arg)
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     wifi_config_t wifi_config = {
-        .ap = {
+        .sta = {
              .ssid = EXAMPLE_WIFI_SSID,
-            .ssid_len = strlen(EXAMPLE_WIFI_SSID),
             .password = EXAMPLE_WIFI_PASS,
-            .max_connection = 4,
-            .authmode = WIFI_AUTH_WPA_WPA2_PSK
+           
         },
     };
     ESP_LOGI(TAG, "Setting WiFi configuration SSID %s...", wifi_config.sta.ssid);
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 }
 
 static void can_receive_task(void *arg)
 {
 
-   
+ 
    can_with_id message_struct[QUEUE_SIZE_CAN];
    
-   can_with_id *pmessage;
-   pmessage = message_struct;
+//    can_with_id *pmessage;
+//    pmessage = message_struct;
    
    int count = 0;
 esp_err_t test;
 
 while(1){
+    xSemaphoreTake(rx_sem, portMAX_DELAY);
+    uint32_t alerts;
+    can_read_alerts(&alerts,0 );
+    //  ESP_LOGI(TAG,"alert----- %d", alerts);
+
     
     
 for (size_t i = 0; i < QUEUE_SIZE_CAN; i++)
 {
 
-    test = can_receive(&message_struct[i].message,pdMS_TO_TICKS(100));
+    test = can_receive(&message_struct[i].message,0);
+    //  ESP_LOGI(TAG, "receive %d ", test);
 
 
 //Process received message
 if (test == ESP_OK){
   
-    count++;
-    pmessage->x = count;
-    if (message_struct[i].message.identifier == (uint32_t) 2024U)
-    {
-        ESP_LOGI(TAG,"---------- %d", message_struct[i].message.identifier);
-        /* code */
-    }
+    // count++;
+    // pmessage->x = count;
+    // if (message_struct[i].message.identifier == (uint32_t) 2024U)
+    // {
+    //     ESP_LOGI(TAG,"---------- %d", message_struct[i].message.identifier);
+    //     /* code */
+    // }
     
 
-xQueueSend(can_queue, &pmessage, 100);
+// if ( xQueueSend(can_queue, &message_struct[i], 0) == 0/* condition */)
+// {
+//      ESP_LOGI(TAG,"--------- queue error");
+// }
+xQueueSend(can_queue, &message_struct[i], 0);
+
+
+
 
   
 }
-pmessage++;
+// pmessage++;
     /* code */
 }
-pmessage = message_struct;
+// pmessage = message_struct;
 
 // if ((count % QUEUE_SIZE_CAN) ==0) { xQueueReset(can_queue); count=0; }
 
@@ -440,8 +458,8 @@ pmessage = message_struct;
 
  
     
-
-    vTaskDelay(15 / portTICK_PERIOD_MS);
+    xSemaphoreGive(rx_sem);
+    vTaskDelay(1);
   
 }
     
@@ -463,7 +481,7 @@ static void can_send_task(void *arg)
 
 while(1){
 
-    test = can_transmit( &tx_message, pdMS_TO_TICKS(100));
+    test = can_transmit( &tx_message, 0);
       ESP_LOGI(TAG, "sent OBD query %d ", test);
     vTaskDelay(500 / portTICK_PERIOD_MS);
   
@@ -476,15 +494,16 @@ void app_main()
 {
 
    
-   
-    can_queue=  xQueueCreate(QUEUE_SIZE_CAN, sizeof(can_with_id*) );
-    xTaskCreatePinnedToCore(can_receive_task, "CAN_rx", 4096, NULL, RX_TASK_PRIO, NULL, tskNO_AFFINITY);
-    xTaskCreatePinnedToCore(can_send_task, "CAN_tx", 4096, NULL, RX_TASK_PRIO, NULL, tskNO_AFFINITY);
+    rx_sem = xSemaphoreCreateBinary();
+    can_queue=  xQueueCreate(QUEUE_SIZE_CAN, sizeof(can_with_id) );
+    xTaskCreatePinnedToCore(can_receive_task, "CAN_rx",                QUEUE_SIZE_CAN*1024, NULL, 2, NULL, tskNO_AFFINITY);
+    // xTaskCreatePinnedToCore(can_send_task, "CAN_tx", 1024, NULL, RX_TASK_PRIO, NULL, tskNO_AFFINITY);
 
     //Install and start CAN driver
     ESP_ERROR_CHECK(can_driver_install(&g_config, &t_config, &f_config));
     ESP_LOGI(EXAMPLE_TAG, "Driver installed");
     ESP_ERROR_CHECK(can_start());
+    xSemaphoreGive(rx_sem);
     ESP_LOGI(EXAMPLE_TAG, "Driver started");
      static httpd_handle_t server = NULL;
     ESP_ERROR_CHECK(nvs_flash_init());

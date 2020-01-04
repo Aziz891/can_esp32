@@ -4,7 +4,7 @@
             "name": "ESP32",
             "includePath": [
                 "${workspaceFolder}/**",
-                "C:\\Users\\hanan\\Desktop\\esp-idf\\components\\**"
+                "C:\\Users\\aziza\\esp-idf\\components\\**"
             ],
             "defines": [
                 "_DEBUG",
@@ -12,7 +12,7 @@
                 "_UNICODE"
             ],
             "intelliSenseMode": "${default}",
-            "compilerPath": "C:\\Users\\hanan\\.espressif\\tools\\xtensa-esp32-elf\\1.22.0-80-g6c4433a5-5.2.0\\xtensa-esp32-elf\\bin\\xtensa-esp32-elf-gcc.exe"
+            "compilerPath": "C:\\Users\\aziza\\.espressif\\tools\\xtensa-esp32-elf\\1.22.0-80-g6c4433a5-5.2.0\\xtensa-esp32-elf\\bin\\xtensa-esp32-elf-gcc.exe"
         }
     ],
     "version": 4
