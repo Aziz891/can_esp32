@@ -1,5 +1,6 @@
 import asyncio
 import websockets
+from encodings import ascii
 
 async def hello(websocket, path):
     async for message in websocket:

@@ -31,6 +31,7 @@
 #include <esp_system.h>
 #include <nvs_flash.h>
 #include <sys/param.h>
+#include "esp_websocket_client.h"
 
 #include <esp_http_server.h>
 
@@ -48,9 +49,9 @@
 #define ID_SLAVE_STOP_RESP              0x0B0
 #define ID_SLAVE_DATA                   0x0B1
 #define ID_SLAVE_PING_RESP              0x0B2
-#define QUEUE_SIZE_CAN              100
-#define QUEUE_SIZE_SCALE              100
-#define QUEUE_SIZE_RX              50
+#define QUEUE_SIZE_CAN              20
+#define QUEUE_SIZE_SCALE              20
+#define QUEUE_SIZE_RX              20
 xQueueHandle can_queue;
 typedef struct 
    {
@@ -61,7 +62,7 @@ typedef struct
 static const can_filter_config_t f_config =  CAN_FILTER_CONFIG_ACCEPT_ALL();//{.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFFFFF, .single_filter = true};
 static const can_timing_config_t t_config = CAN_TIMING_CONFIG_500KBITS();;
 //Set TX queue length to 0 due to listen only mode
-static const can_general_config_t g_config =  {.mode = CAN_MODE_NORMAL, .tx_io = 21, .rx_io = 22, .clkout_io = CAN_IO_UNUSED, .bus_off_io = CAN_IO_UNUSED, .tx_queue_len = 5, .rx_queue_len = 500, .alerts_enabled =  0x0400 , .clkout_divider = 0, };   // CAN_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, CAN_MODE_NORMAL);
+static const can_general_config_t g_config =  {.mode = CAN_MODE_NORMAL, .tx_io = 21, .rx_io = 22, .clkout_io = CAN_IO_UNUSED, .bus_off_io = CAN_IO_UNUSED, .tx_queue_len = 5, .rx_queue_len =   100, .alerts_enabled =  0x0400 , .clkout_divider = 0, };   // CAN_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, CAN_MODE_NORMAL);
 
 static SemaphoreHandle_t rx_sem;
 
@@ -71,85 +72,27 @@ static SemaphoreHandle_t rx_sem;
 #define EXAMPLE_WIFI_PASS "0504153443"
 
 static const char *TAG="APP";
+static const char *WEBSOCKET_ECHO_ENDPOINT =    "ws://192.168.100.111:8765";
 
 
 
 /* An HTTP GET handler */
-esp_err_t hello_get_handler(httpd_req_t *req)
+const char* format_can_to_string()
 {
-     xSemaphoreTake(rx_sem, portMAX_DELAY);
-    char*  buf;
-    size_t buf_len;
 
-    /* Get header value string length and allocate memory for length + 1,
-     * extra byte for null termination */
-    buf_len = httpd_req_get_hdr_value_len(req, "Host") + 1;
-    if (buf_len > 1) {
-        buf = malloc(buf_len);
-        /* Copy null terminated value string into buffer */
-        if (httpd_req_get_hdr_value_str(req, "Host", buf, buf_len) == ESP_OK) {
-            ESP_LOGI(TAG, "Found header => Host: %s", buf);
-        }
-        free(buf);
-    }
+char string_final[QUEUE_SIZE_SCALE *100];
 
-    buf_len = httpd_req_get_hdr_value_len(req, "Test-Header-2") + 1;
-    if (buf_len > 1) {
-        buf = malloc(buf_len);
-        if (httpd_req_get_hdr_value_str(req, "Test-Header-2", buf, buf_len) == ESP_OK) {
-            ESP_LOGI(TAG, "Found header => Test-Header-2: %s", buf);
-        }
-        free(buf);
-    }
 
-    buf_len = httpd_req_get_hdr_value_len(req, "Test-Header-1") + 1;
-    if (buf_len > 1) {
-        buf = malloc(buf_len);
-        if (httpd_req_get_hdr_value_str(req, "Test-Header-1", buf, buf_len) == ESP_OK) {
-            ESP_LOGI(TAG, "Found header => Test-Header-1: %s", buf);
-        }
-        free(buf);
-    }
-
-    /* Read URL query string length and allocate memory for length + 1,
-     * extra byte for null termination */
-    buf_len = httpd_req_get_url_query_len(req) + 1;
-    if (buf_len > 1) {
-        buf = malloc(buf_len);
-        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
-            ESP_LOGI(TAG, "Found URL query => %s", buf);
-            char param[32];
-            /* Get value of expected key from query string */
-            if (httpd_query_key_value(buf, "query1", param, sizeof(param)) == ESP_OK) {
-                ESP_LOGI(TAG, "Found URL query parameter => query1=%s", param);
-            }
-            if (httpd_query_key_value(buf, "query3", param, sizeof(param)) == ESP_OK) {
-                ESP_LOGI(TAG, "Found URL query parameter => query3=%s", param);
-            }
-            if (httpd_query_key_value(buf, "query2", param, sizeof(param)) == ESP_OK) {
-                ESP_LOGI(TAG, "Found URL query parameter => query2=%s", param);
-            }
-        }
-        free(buf);
-    }
-
-    /* Set some custom headers */
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_set_hdr(req, "Custom-Header-2", "Custom-Value-2");
-
-    /* Send response with custom headers and body set as the
-     * string passed in user context*/
-char* string_final;
-string_final = malloc(QUEUE_SIZE_SCALE *300);
-char str[30];         // temporary string holder
+char str[30];     // temporary string holder
 
 string_final[0] = '\0';      // clean up the string_final
 sprintf( str, "{ \"messages\" : [ \n");            strcat( string_final, str);
      can_with_id message[QUEUE_SIZE_SCALE];
     for (size_t i = 0; i < QUEUE_SIZE_SCALE; i++)
     {
-     if(xQueueReceive(can_queue,&message[i], 0 ) != 0){
-sprintf( str, "{ \"#\": %d", message[i].x );        strcat( string_final, str);
+        if(xQueueReceive(can_queue,&message[i], 0 ) != 0){
+     
+// sprintf( str, "{ \"#\": %d", message[i].x );        strcat( string_final, str);
 sprintf( str, ",\"ID\": %d", message[i].message.identifier );        strcat( string_final, str);
 sprintf( str, ",\"length\": %u", message[i].message.data_length_code );        strcat( string_final, str);
 for (uint8_t j = 0; j < message[i].message.data_length_code; j++)
@@ -163,183 +106,99 @@ sprintf( str, "}\n");   strcat( string_final, str);
 if (i != (QUEUE_SIZE_SCALE-1)){
 sprintf( str, ",");   strcat( string_final, str);
 }
+        }
+        else 
+        break;
 
-
-     }
+     
         /* code */
     }
-    ESP_LOGI(TAG, "finished reading");
+    // ESP_LOGI(TAG, "finished reading");
      
     // const char* resp_str = (const char*) req->user_ctx;
 
 
 
-sprintf( str, "]}");            strcat( string_final, str);
+sprintf( str, "]} ");            strcat( string_final, str);
+
 
 
     
     const char* resp_str = (const char*) string_final;
-    ESP_LOGI(TAG, "begin sending response");
     
-    httpd_resp_send(req, resp_str, strlen(resp_str));
-    ESP_LOGI(TAG, "finished sending response");
-    free(string_final);
-
-    /* After sending the HTTP response the old HTTP request
-     * headers are lost. Check if HTTP request headers can be read now. */
-    if (httpd_req_get_hdr_value_len(req, "Host") == 0) {
-        ESP_LOGI(TAG, "Request headers lost");
-    }
-     xSemaphoreGive(rx_sem);
-    return ESP_OK;
+    return resp_str;
 }
 
-httpd_uri_t hello = {
-    .uri       = "/hello",
-    .method    = HTTP_GET,
-    .handler   = hello_get_handler,
-    /* Let's pass response string in user
-     * context to demonstrate it's usage */
-    .user_ctx  = "Hello World!"
-};
-
-/* An HTTP POST handler */
-esp_err_t echo_post_handler(httpd_req_t *req)
+static void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
-    char buf[100];
-    int ret, remaining = req->content_len;
+    // esp_websocket_client_handle_t client = (esp_websocket_client_handle_t)handler_args;
+    esp_websocket_event_data_t *data = (esp_websocket_event_data_t *)event_data;
+    switch (event_id) {
+        case WEBSOCKET_EVENT_CONNECTED:
+            ESP_LOGI(TAG, "WEBSOCKET_EVENT_CONNECTED");
 
-    while (remaining > 0) {
-        /* Read the data for the request */
-        if ((ret = httpd_req_recv(req, buf,
-                        MIN(remaining, sizeof(buf)))) <= 0) {
-            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
-                /* Retry receiving if timeout occurred */
-                continue;
-            }
-            return ESP_FAIL;
-        }
 
-        /* Send back the same data */
-        httpd_resp_send_chunk(req, buf, ret);
-        remaining -= ret;
+            break;
+        case WEBSOCKET_EVENT_DISCONNECTED:
+            ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
+            break;
 
-        /* Log data received */
-        ESP_LOGI(TAG, "=========== RECEIVED DATA ==========");
-        ESP_LOGI(TAG, "%.*s", ret, buf);
-        ESP_LOGI(TAG, "====================================");
+        case WEBSOCKET_EVENT_DATA:
+            ESP_LOGI(TAG, "WEBSOCKET_EVENT_DATA");
+            ESP_LOGI(TAG, "Received opcode=%d", data->op_code);
+            ESP_LOGW(TAG, "Received=%.*s\r\n", data->data_len, (char*)data->data_ptr);
+            break;
+        case WEBSOCKET_EVENT_ERROR:
+            ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
+            break;
+
     }
-
-    // End response
-    httpd_resp_send_chunk(req, NULL, 0);
-    return ESP_OK;
 }
-
-httpd_uri_t echo = {
-    .uri       = "/echo",
-    .method    = HTTP_POST,
-    .handler   = echo_post_handler,
-    .user_ctx  = NULL
-};
-
-/* This handler allows the custom error handling functionality to be
- * tested from client side. For that, when a PUT request 0 is sent to
- * URI /ctrl, the /hello and /echo URIs are unregistered and following
- * custom error handler http_404_error_handler() is registered.
- * Afterwards, when /hello or /echo is requested, this custom error
- * handler is invoked which, after sending an error message to client,
- * either closes the underlying socket (when requested URI is /echo)
- * or keeps it open (when requested URI is /hello). This allows the
- * client to infer if the custom error handler is functioning as expected
- * by observing the socket state.
- */
-esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err)
+static void websocket_app_start(void *arg)
 {
-    if (strcmp("/hello", req->uri) == 0) {
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "/hello URI is not available");
-        /* Return ESP_OK to keep underlying socket open */
-        return ESP_OK;
-    } else if (strcmp("/echo", req->uri) == 0) {
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "/echo URI is not available");
-        /* Return ESP_FAIL to close underlying socket */
-        return ESP_FAIL;
+     xSemaphoreTake(rx_sem, portMAX_DELAY);
+    ESP_LOGI(TAG, "Connectiong to %s...", WEBSOCKET_ECHO_ENDPOINT);
+
+    const esp_websocket_client_config_t websocket_cfg = {
+        .uri = WEBSOCKET_ECHO_ENDPOINT, // or wss://echo.websocket.org for websocket secure
+    };
+
+    esp_websocket_client_handle_t client = esp_websocket_client_init(&websocket_cfg);
+    ESP_LOGI(TAG, "1");
+    esp_websocket_register_events(client, WEBSOCKET_EVENT_ANY, websocket_event_handler, (void *)client);
+    ESP_LOGI(TAG, "2");
+
+    esp_websocket_client_start(client);
+    ESP_LOGI(TAG, "3");
+    xSemaphoreGive(rx_sem);
+    BaseType_t stack;
+    
+    while (1) {
+     xSemaphoreTake(rx_sem, portMAX_DELAY);
+    //  ESP_LOGI(TAG, "sending");
+     char* data;
+    data = format_can_to_string();
+   
+    esp_websocket_client_send_text(client, data, strlen(data), 10000);
+    // stack = uxTaskGetStackHighWaterMark(NULL);
+    //  ESP_LOGI(TAG, "stack --- %d", stack);
+     
+
+    xSemaphoreGive(rx_sem);
+    
+    
+
     }
-    /* For any other URI send 404 and close socket */
-    httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Some 404 error message");
-    return ESP_FAIL;
+
+  
 }
 
-/* An HTTP PUT handler. This demonstrates realtime
- * registration and deregistration of URI handlers
- */
-esp_err_t ctrl_put_handler(httpd_req_t *req)
-{
-    char buf;
-    int ret;
 
-    if ((ret = httpd_req_recv(req, &buf, 1)) <= 0) {
-        if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
-            httpd_resp_send_408(req);
-        }
-        return ESP_FAIL;
-    }
 
-    if (buf == '0') {
-        /* URI handlers can be unregistered using the uri string */
-        ESP_LOGI(TAG, "Unregistering /hello and /echo URIs");
-        httpd_unregister_uri(req->handle, "/hello");
-        httpd_unregister_uri(req->handle, "/echo");
-        /* Register the custom error handler */
-        httpd_register_err_handler(req->handle, HTTPD_404_NOT_FOUND, http_404_error_handler);
-    }
-    else {
-        ESP_LOGI(TAG, "Registering /hello and /echo URIs");
-        httpd_register_uri_handler(req->handle, &hello);
-        httpd_register_uri_handler(req->handle, &echo);
-        /* Unregister custom error handler */
-        httpd_register_err_handler(req->handle, HTTPD_404_NOT_FOUND, NULL);
-    }
 
-    /* Respond with empty body */
-    httpd_resp_send(req, NULL, 0);
-    return ESP_OK;
-}
 
-httpd_uri_t ctrl = {
-    .uri       = "/ctrl",
-    .method    = HTTP_PUT,
-    .handler   = ctrl_put_handler,
-    .user_ctx  = NULL
-};
 
-httpd_handle_t start_webserver(void)
-{
-    httpd_handle_t server = NULL;
-    httpd_config_t config = { .task_priority = tskIDLE_PRIORITY+5, .stack_size = 1024*QUEUE_SIZE_SCALE, .server_port = 80, .ctrl_port = 32768,\
-     .max_open_sockets = 7, .max_uri_handlers = 8, .max_resp_headers = 8, .backlog_conn = 5, .lru_purge_enable = false, .recv_wait_timeout = 5,\
-      .send_wait_timeout = 5, .global_user_ctx = NULL, .global_user_ctx_free_fn = NULL, .global_transport_ctx = NULL, .global_transport_ctx_free_fn = NULL,\
-       .open_fn = NULL, .close_fn = NULL, .uri_match_fn = NULL };
 
-    // Start the httpd server
-    ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
-    if (httpd_start(&server, &config) == ESP_OK) {
-        // Set URI handlers
-        ESP_LOGI(TAG, "Registering URI handlers");
-        httpd_register_uri_handler(server, &hello);
-        httpd_register_uri_handler(server, &echo);
-        httpd_register_uri_handler(server, &ctrl);
-        return server;
-    }
-
-    ESP_LOGI(TAG, "Error starting server!");
-    return NULL;
-}
-
-void stop_webserver(httpd_handle_t server)
-{
-    // Stop the httpd server
-    httpd_stop(server);
-}
 
 static esp_err_t event_handler(void *ctx, system_event_t *event)
 {
@@ -354,21 +213,19 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
         ESP_LOGI(TAG, "STA CONNECTED, STARTING WEB SERVER");
         ESP_LOGI(TAG, "Got IP: '%s'",
                 ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
+                xSemaphoreGive(rx_sem);
+                // websocket_app_start();
+               
 
-        /* Start the web server */
-        if (*server == NULL) {
-            *server = start_webserver();
-        }
+
+     
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
         ESP_LOGI(TAG, "SYSTEM_EVENT_STA_DISCONNECTED");
         ESP_ERROR_CHECK(esp_wifi_connect());
 
         /* Stop the web server */
-        if (*server) {
-            stop_webserver(*server);
-            *server = NULL;
-        }
+     
         break;
     default:
         break;
@@ -407,59 +264,68 @@ static void can_receive_task(void *arg)
    
    int count = 0;
 esp_err_t test;
+    uint32_t alerts;
+    BaseType_t stack;
+
+
 
 while(1){
     xSemaphoreTake(rx_sem, portMAX_DELAY);
-    uint32_t alerts;
     can_read_alerts(&alerts,0 );
-    //  ESP_LOGI(TAG,"alert----- %d", alerts);
+     ESP_LOGI(TAG,"alert----- %d", alerts);
 
     
     
 for (size_t i = 0; i < QUEUE_SIZE_CAN; i++)
 {
 
-    test = can_receive(&message_struct[i].message,0);
+    can_receive(&message_struct[i].message,0);
     //  ESP_LOGI(TAG, "receive %d ", test);
 
 
 //Process received message
-if (test == ESP_OK){
+// if (test == ESP_OK){
   
-    // count++;
-    // pmessage->x = count;
-    // if (message_struct[i].message.identifier == (uint32_t) 2024U)
-    // {
-    //     ESP_LOGI(TAG,"---------- %d", message_struct[i].message.identifier);
-    //     /* code */
-    // }
+//     // count++;
+//     // pmessage->x = count;
+//     // if (message_struct[i].message.identifier == (uint32_t) 2024U)
+//     // {
+//     //     ESP_LOGI(TAG,"---------- %d", message_struct[i].message.identifier);
+//     //     /* code */
+//     // }
     
 
-// if ( xQueueSend(can_queue, &message_struct[i], 0) == 0/* condition */)
-// {
-//      ESP_LOGI(TAG,"--------- queue error");
-// }
-xQueueSend(can_queue, &message_struct[i], 0);
+// // if (  == 0/* condition */)
+// // {
+// //      ESP_LOGI(TAG,"--------- queue error");
+// // }
+
 
 
 
 
   
-}
+// }
+xQueueSend(can_queue, &message_struct[i], 0);
 // pmessage++;
     /* code */
 }
-// pmessage = message_struct;
 
-// if ((count % QUEUE_SIZE_CAN) ==0) { xQueueReset(can_queue); count=0; }
+
+
+
+
+
 
 
 
 
  
-    
+    //  stack = uxTaskGetStackHighWaterMark(NULL);
+    //  ESP_LOGI("can", "stack --- %d", stack);
     xSemaphoreGive(rx_sem);
     vTaskDelay(1);
+    
   
 }
     
@@ -483,7 +349,7 @@ while(1){
 
     test = can_transmit( &tx_message, 0);
       ESP_LOGI(TAG, "sent OBD query %d ", test);
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+        vTaskDelay(500 / portTICK_PERIOD_MS);
   
 }
     
@@ -496,14 +362,16 @@ void app_main()
    
     rx_sem = xSemaphoreCreateBinary();
     can_queue=  xQueueCreate(QUEUE_SIZE_CAN, sizeof(can_with_id) );
-    xTaskCreatePinnedToCore(can_receive_task, "CAN_rx",                QUEUE_SIZE_CAN*1024, NULL, 2, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(can_receive_task, "CAN_rx",               1000+QUEUE_SIZE_CAN*100, NULL, 4, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(websocket_app_start, "websocket_task",                1000+QUEUE_SIZE_CAN*400, NULL, 4, NULL, tskNO_AFFINITY);
     // xTaskCreatePinnedToCore(can_send_task, "CAN_tx", 1024, NULL, RX_TASK_PRIO, NULL, tskNO_AFFINITY);
 
     //Install and start CAN driver
     ESP_ERROR_CHECK(can_driver_install(&g_config, &t_config, &f_config));
     ESP_LOGI(EXAMPLE_TAG, "Driver installed");
     ESP_ERROR_CHECK(can_start());
-    xSemaphoreGive(rx_sem);
+    
+    
     ESP_LOGI(EXAMPLE_TAG, "Driver started");
      static httpd_handle_t server = NULL;
     ESP_ERROR_CHECK(nvs_flash_init());
