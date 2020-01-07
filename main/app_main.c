@@ -49,20 +49,16 @@
 #define ID_SLAVE_STOP_RESP              0x0B0
 #define ID_SLAVE_DATA                   0x0B1
 #define ID_SLAVE_PING_RESP              0x0B2
-#define QUEUE_SIZE_CAN              20
-#define QUEUE_SIZE_SCALE              20
-#define QUEUE_SIZE_RX              20
+#define QUEUE_SIZE_CAN              50
+#define QUEUE_SIZE_SCALE              50
+#define QUEUE_SIZE_RX              50
 xQueueHandle can_queue;
-typedef struct 
-   {
-       int x;
-   can_message_t message;    
-   } can_with_id;
+typedef  can_message_t can_with_id;
 
 static const can_filter_config_t f_config =  CAN_FILTER_CONFIG_ACCEPT_ALL();//{.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFFFFF, .single_filter = true};
 static const can_timing_config_t t_config = CAN_TIMING_CONFIG_500KBITS();;
 //Set TX queue length to 0 due to listen only mode
-static const can_general_config_t g_config =  {.mode = CAN_MODE_NORMAL, .tx_io = 21, .rx_io = 22, .clkout_io = CAN_IO_UNUSED, .bus_off_io = CAN_IO_UNUSED, .tx_queue_len = 5, .rx_queue_len =   100, .alerts_enabled =  0x0400 , .clkout_divider = 0, };   // CAN_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, CAN_MODE_NORMAL);
+static const can_general_config_t g_config =  {.mode = CAN_MODE_NORMAL, .tx_io = 21, .rx_io = 22, .clkout_io = CAN_IO_UNUSED, .bus_off_io = CAN_IO_UNUSED, .tx_queue_len = 5, .rx_queue_len =   500, .alerts_enabled =  0x0400 , .clkout_divider = 0, };   // CAN_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, CAN_MODE_NORMAL);
 
 static SemaphoreHandle_t rx_sem;
 
@@ -77,7 +73,7 @@ static const char *WEBSOCKET_ECHO_ENDPOINT =    "ws://192.168.100.111:8765";
 
 
 /* An HTTP GET handler */
-const char* format_can_to_string()
+const char* format_can_to_string(xQueueHandle can_queue)
 {
 
 char string_final[QUEUE_SIZE_SCALE *100];
@@ -86,25 +82,26 @@ char string_final[QUEUE_SIZE_SCALE *100];
 char str[30];     // temporary string holder
 
 string_final[0] = '\0';      // clean up the string_final
-sprintf( str, "{ \"messages\" : [ \n");            strcat( string_final, str);
+strcat( string_final, "{ \"messages\" : [ \n");
      can_with_id message[QUEUE_SIZE_SCALE];
     for (size_t i = 0; i < QUEUE_SIZE_SCALE; i++)
     {
+        
         if(xQueueReceive(can_queue,&message[i], 0 ) != 0){
      
 // sprintf( str, "{ \"#\": %d", message[i].x );        strcat( string_final, str);
-sprintf( str, ",\"ID\": %d", message[i].message.identifier );        strcat( string_final, str);
-sprintf( str, ",\"length\": %u", message[i].message.data_length_code );        strcat( string_final, str);
-for (uint8_t j = 0; j < message[i].message.data_length_code; j++)
+sprintf( str, "{\"ID\": %d", message[i].identifier );        strcat( string_final, str);
+sprintf( str, ",\"length\": %u", message[i].data_length_code );        strcat( string_final, str);
+for (uint8_t j = 0; j < message[i].data_length_code; j++)
 {
-sprintf( str, ",\"data%u\" : %u", j, message[i].message.data[j]);   strcat( string_final, str);
+sprintf( str, ",\"data%u\" : %u", j, message[i].data[j]);   strcat( string_final, str);
     
 }
-sprintf( str, "}\n");   strcat( string_final, str);
+strcat( string_final, "}\n");
 
 
 if (i != (QUEUE_SIZE_SCALE-1)){
-sprintf( str, ",");   strcat( string_final, str);
+  strcat( string_final, ",");
 }
         }
         else 
@@ -120,6 +117,63 @@ sprintf( str, ",");   strcat( string_final, str);
 
 
 sprintf( str, "]} ");            strcat( string_final, str);
+
+
+
+    
+    const char* resp_str = (const char*) string_final;
+    
+    return resp_str;
+}
+
+const char* format_can_to_string_itoa(xQueueHandle can_queue)
+{
+
+char string_final[QUEUE_SIZE_SCALE *100];
+size_t length = 0;
+
+
+
+
+char str[30];     // temporary string holder
+
+string_final[0] = '\0';      // clean up the string_final
+length += sprintf(string_final + length,"%s",  "{ \"messages\" : [ \n");
+     can_with_id message[QUEUE_SIZE_SCALE];
+    for (size_t i = 0; i < QUEUE_SIZE_SCALE; i++)
+    {
+        
+        if(xQueueReceive(can_queue,&message[i], 0 ) != 0){
+     
+// sprintf( str, "{ \"#\": %d", message[i].x );        strcat( string_final, str);
+sprintf( str, "{\"ID\": %d", message[i].identifier );        length += sprintf(string_final + length,"%s", str);
+sprintf( str, ",\"length\": %u", message[i].data_length_code );        length += sprintf(string_final + length,"%s", str);
+for (uint8_t j = 0; j < message[i].data_length_code; j++)
+{
+sprintf( str, ",\"data%u\" : %u", j, message[i].data[j]);   length += sprintf(string_final + length,"%s", str);
+    
+}
+
+length += sprintf(string_final + length,"%s", "}\n");
+
+
+if (i != (QUEUE_SIZE_SCALE-1)){
+  length += sprintf(string_final + length,"%s", ",");
+}
+        }
+        else 
+        break;
+
+     
+        /* code */
+    }
+    // ESP_LOGI(TAG, "finished reading");
+     
+    // const char* resp_str = (const char*) req->user_ctx;
+
+
+
+sprintf( str, "]} ");            length += sprintf(string_final + length,"%s", str);
 
 
 
@@ -177,14 +231,14 @@ static void websocket_app_start(void *arg)
      xSemaphoreTake(rx_sem, portMAX_DELAY);
     //  ESP_LOGI(TAG, "sending");
      char* data;
-    data = format_can_to_string();
+    data = format_can_to_string_itoa(can_queue);
    
     esp_websocket_client_send_text(client, data, strlen(data), 10000);
+    xSemaphoreGive(rx_sem);
     // stack = uxTaskGetStackHighWaterMark(NULL);
     //  ESP_LOGI(TAG, "stack --- %d", stack);
      
 
-    xSemaphoreGive(rx_sem);
     
     
 
@@ -279,7 +333,7 @@ while(1){
 for (size_t i = 0; i < QUEUE_SIZE_CAN; i++)
 {
 
-    can_receive(&message_struct[i].message,0);
+    can_receive(&message_struct[i],0);
     //  ESP_LOGI(TAG, "receive %d ", test);
 
 
