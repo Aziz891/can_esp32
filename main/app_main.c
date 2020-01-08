@@ -516,8 +516,8 @@ static void can_send_task(void *arg)
 
 
 while(1){
-    tx_message.data[0] =  pid_codes[count].service;
-    tx_message.data[1] =  pid_codes[count].code;
+    tx_message.data[1] =  pid_codes[count].service;
+    tx_message.data[2] =  pid_codes[count].code;
     test = can_transmit( &tx_message, 0);
     //   ESP_LOGI(TAG, "sent OBD query %d ", test);
     count++;
