@@ -55,7 +55,7 @@
 xQueueHandle can_queue;
 typedef  can_message_t can_with_id;
 
-static const can_filter_config_t f_config =  CAN_FILTER_CONFIG_ACCEPT_ALL();//{.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFFFFF, .single_filter = true};
+static const can_filter_config_t f_config =  {.acceptance_code = 0x7E8<<3, .acceptance_mask = 0x7, .single_filter = true}; // CAN_FILTER_CONFIG_ACCEPT_ALL();//
 static const can_timing_config_t t_config = CAN_TIMING_CONFIG_500KBITS();;
 //Set TX queue length to 0 due to listen only mode
 static const can_general_config_t g_config =  {.mode = CAN_MODE_NORMAL, .tx_io = 21, .rx_io = 22, .clkout_io = CAN_IO_UNUSED, .bus_off_io = CAN_IO_UNUSED, .tx_queue_len = 5, .rx_queue_len =   500, .alerts_enabled =  0x0400 , .clkout_divider = 0, };   // CAN_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, CAN_MODE_NORMAL);
@@ -143,7 +143,7 @@ length += sprintf(string_final + length,"%s",  "{ \"messages\" : [ \n");
     for (size_t i = 0; i < QUEUE_SIZE_SCALE; i++)
     {
         
-        if(xQueueReceive(can_queue,&message[i], 0 ) != 0){
+        if(xQueueReceive(can_queue,&message[i], 0 ) != errQUEUE_EMPTY){
      
 // sprintf( str, "{ \"#\": %d", message[i].x );        strcat( string_final, str);
 sprintf( str, "{\"ID\": %d", message[i].identifier );        length += sprintf(string_final + length,"%s", str);
@@ -161,8 +161,12 @@ if (i != (QUEUE_SIZE_SCALE-1)){
   length += sprintf(string_final + length,"%s", ",");
 }
         }
-        else 
+        else{
+
+    ESP_LOGI("websocket", "queue empty");
         break;
+
+        } 
 
      
         /* code */
@@ -197,11 +201,11 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
             ESP_LOGI(TAG, "WEBSOCKET_EVENT_DISCONNECTED");
             break;
 
-        case WEBSOCKET_EVENT_DATA:
-            ESP_LOGI(TAG, "WEBSOCKET_EVENT_DATA");
-            ESP_LOGI(TAG, "Received opcode=%d", data->op_code);
-            ESP_LOGW(TAG, "Received=%.*s\r\n", data->data_len, (char*)data->data_ptr);
-            break;
+        // case WEBSOCKET_EVENT_DATA:
+        //     ESP_LOGI(TAG, "WEBSOCKET_EVENT_DATA");
+        //     ESP_LOGI(TAG, "Received opcode=%d", data->op_code);
+        //     ESP_LOGW(TAG, "Received=%.*s\r\n", data->data_len, (char*)data->data_ptr);
+        //     break;
         case WEBSOCKET_EVENT_ERROR:
             ESP_LOGI(TAG, "WEBSOCKET_EVENT_ERROR");
             break;
@@ -225,13 +229,16 @@ static void websocket_app_start(void *arg)
     esp_websocket_client_start(client);
     ESP_LOGI(TAG, "3");
     xSemaphoreGive(rx_sem);
+    vTaskDelay(50);
     BaseType_t stack;
     
     while (1) {
      xSemaphoreTake(rx_sem, portMAX_DELAY);
+  
     //  ESP_LOGI(TAG, "sending");
      char* data;
     data = format_can_to_string_itoa(can_queue);
+   
    
     esp_websocket_client_send_text(client, data, strlen(data), 10000);
     xSemaphoreGive(rx_sem);
@@ -333,8 +340,11 @@ while(1){
 for (size_t i = 0; i < QUEUE_SIZE_CAN; i++)
 {
 
-    can_receive(&message_struct[i],0);
-    //  ESP_LOGI(TAG, "receive %d ", test);
+ 
+    test = can_receive(&message_struct[i],0);
+    
+    
+
 
 
 //Process received message
@@ -360,6 +370,7 @@ for (size_t i = 0; i < QUEUE_SIZE_CAN; i++)
 
   
 // }
+if(test == ESP_OK)
 xQueueSend(can_queue, &message_struct[i], 0);
 // pmessage++;
     /* code */
@@ -376,9 +387,9 @@ xQueueSend(can_queue, &message_struct[i], 0);
 
  
     //  stack = uxTaskGetStackHighWaterMark(NULL);
-    //  ESP_LOGI("can", "stack --- %d", stack);
+    //  ESP_LOGI("can", "about to give semaphore");
     xSemaphoreGive(rx_sem);
-    vTaskDelay(1);
+    vTaskDelay(5);
     
   
 }
