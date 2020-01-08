@@ -60,7 +60,7 @@ typedef struct
    
 
 static const can_filter_config_t f_config =  {.acceptance_code = 0x7E8<<21, .acceptance_mask = 0X1FFFFF, .single_filter = true};  //CAN_FILTER_CONFIG_ACCEPT_ALL();//{.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFFFFF, .single_filter = true};
-static const can_timing_config_t t_config = CAN_TIMING_CONFIG_500KBITS();;
+static const can_timing_config_t t_config = CAN_TIMING_CONFIG_500KBITS();
 //Set TX queue length to 0 due to listen only mode
 static const can_general_config_t g_config =  {.mode = CAN_MODE_NORMAL, .tx_io = 21, .rx_io = 22, .clkout_io = CAN_IO_UNUSED, .bus_off_io = CAN_IO_UNUSED, .tx_queue_len = 5, .rx_queue_len = 500, .alerts_enabled =  0x0400 , .clkout_divider = 0, };   // CAN_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, CAN_MODE_NORMAL);
 
