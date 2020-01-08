@@ -59,7 +59,7 @@ typedef struct
    } can_with_id;
    
 
-static const can_filter_config_t f_config =  {.acceptance_code = 0x7E8<<21, .acceptance_mask = 0X1FFFFF, .single_filter = true};  //CAN_FILTER_CONFIG_ACCEPT_ALL();//{.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFFFFF, .single_filter = true};
+static const can_filter_config_t f_config =  {.acceptance_code = 0x7E8<<21, .acceptance_mask = 0xFFFFFF, .single_filter = true};  //CAN_FILTER_CONFIG_ACCEPT_ALL();//{.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFFFFF, .single_filter = true};
 static const can_timing_config_t t_config = CAN_TIMING_CONFIG_500KBITS();
 //Set TX queue length to 0 due to listen only mode
 static const can_general_config_t g_config =  {.mode = CAN_MODE_NORMAL, .tx_io = 21, .rx_io = 22, .clkout_io = CAN_IO_UNUSED, .bus_off_io = CAN_IO_UNUSED, .tx_queue_len = 5, .rx_queue_len = 500, .alerts_enabled =  0x0400 , .clkout_divider = 0, };   // CAN_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, CAN_MODE_NORMAL);
@@ -478,43 +478,52 @@ xQueueSend(can_queue, &message_struct[i], 0);
 static void can_send_task(void *arg)
 {
 
-   
-   can_message_t tx_message[4];
-  tx_message[0].identifier =  0x7DF;
-  tx_message[0].data[0] =  2;
-  tx_message[0].data[1] =  1;
-  tx_message[0].data[2] =  12;
-  tx_message[0].data_length_code =  8;
+    struct pid
+   {
+       uint8_t service;
+       uint8_t code;
 
-  tx_message[1].identifier =  0x7DF;
-  tx_message[1].data[0] =  2;
-  tx_message[1].data[1] =  1;
-  tx_message[1].data[2] =  5;
-  tx_message[1].data_length_code =  8;
+       /* data */
+   };
+   const struct pid pid_codes[4] = {{.service = 1, .code = 12}, {.service = 1, .code = 13}, {.service = 1, .code = 5}, {.service = 1, .code = 31} };
+    
+   can_message_t tx_message;
+  tx_message.identifier =  0x7DF;
+  tx_message.data[0] =  2;
+  tx_message.data[1] =  1;
+  tx_message.data[2] =  12;
+  tx_message.data_length_code =  8;
 
-  tx_message[2].identifier =  0x7DF;
-  tx_message[2].data[0] =  2;
-  tx_message[2].data[1] =  1;
-  tx_message[2].data[2] =  28;
-  tx_message[2].data_length_code =  8;
+//   tx_message[1].identifier =  0x7DF;
+//   tx_message[1].data[0] =  2;
+//   tx_message[1].data[1] =  1;
+//   tx_message[1].data[2] =  5;
+//   tx_message[1].data_length_code =  8;
+
+//   tx_message[2].identifier =  0x7DF;
+//   tx_message[2].data[0] =  2;
+//   tx_message[2].data[1] =  1;
+//   tx_message[2].data[2] =  31;
+//   tx_message[2].data_length_code =  8;
   
-  tx_message[3].identifier =  0x7DF;
-  tx_message[3].data[0] =  2;
-  tx_message[3].data[1] =  1;
-  tx_message[3].data[2] =  13;
-  tx_message[3].data_length_code =  8;
+//   tx_message[3].identifier =  0x7DF;
+//   tx_message[3].data[0] =  2;
+//   tx_message[3].data[1] =  1;
+//   tx_message[3].data[2] =  13;
+//   tx_message[3].data_length_code =  8;
   esp_err_t test;
   uint8_t count =0;
 
 
 while(1){
-
-    test = can_transmit( &tx_message[count], 0);
+    tx_message.data[0] =  pid_codes[count].service;
+    tx_message.data[1] =  pid_codes[count].code;
+    test = can_transmit( &tx_message, 0);
     //   ESP_LOGI(TAG, "sent OBD query %d ", test);
     count++;
     if (count == 4)
     count = 0;
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
   
 }
     
