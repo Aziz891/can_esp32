@@ -57,8 +57,9 @@ typedef struct
        int x;
    can_message_t message;    
    } can_with_id;
+   
 
-static const can_filter_config_t f_config = {.acceptance_code = 0x7E8<<3, .acceptance_mask = 0x3F, .single_filter = true}; //CAN_FILTER_CONFIG_ACCEPT_ALL();//{.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFFFFF, .single_filter = true};
+static const can_filter_config_t f_config =  {.acceptance_code = 0x7E8<<21, .acceptance_mask = 0X1FFFFF, .single_filter = true};  //CAN_FILTER_CONFIG_ACCEPT_ALL();//{.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFFFFF, .single_filter = true};
 static const can_timing_config_t t_config = CAN_TIMING_CONFIG_500KBITS();;
 //Set TX queue length to 0 due to listen only mode
 static const can_general_config_t g_config =  {.mode = CAN_MODE_NORMAL, .tx_io = 21, .rx_io = 22, .clkout_io = CAN_IO_UNUSED, .bus_off_io = CAN_IO_UNUSED, .tx_queue_len = 5, .rx_queue_len = 500, .alerts_enabled =  0x0400 , .clkout_divider = 0, };   // CAN_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, CAN_MODE_NORMAL);
@@ -90,7 +91,7 @@ esp_err_t hello_get_handler(httpd_req_t *req)
         buf = malloc(buf_len);
         /* Copy null terminated value string into buffer */
         if (httpd_req_get_hdr_value_str(req, "Host", buf, buf_len) == ESP_OK) {
-            ESP_LOGI(TAG, "Found header => Host: %s", buf);
+            // ESP_LOGI(TAG, "Found header => Host: %s", buf);
         }
         free(buf);
     }
@@ -430,6 +431,9 @@ for (size_t i = 0; i < QUEUE_SIZE_CAN; i++)
 
 //Process received message
 if (test == ESP_OK){
+
+    //  ESP_LOGI(TAG, "receive ");
+
   
     // count++;
     // pmessage->x = count;
@@ -491,7 +495,7 @@ static void can_send_task(void *arg)
   tx_message[2].identifier =  0x7DF;
   tx_message[2].data[0] =  2;
   tx_message[2].data[1] =  1;
-  tx_message[2].data[2] =  166;
+  tx_message[2].data[2] =  28;
   tx_message[2].data_length_code =  8;
   
   tx_message[3].identifier =  0x7DF;
@@ -506,7 +510,7 @@ static void can_send_task(void *arg)
 while(1){
 
     test = can_transmit( &tx_message[count], 0);
-      ESP_LOGI(TAG, "sent OBD query %d ", test);
+    //   ESP_LOGI(TAG, "sent OBD query %d ", test);
     count++;
     if (count == 4)
     count = 0;

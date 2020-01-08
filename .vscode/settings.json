@@ -2,7 +2,8 @@
     "files.associations": {
         "stdio.h": "c",
         "freertos.h": "c",
-        "esp_spi_flash.h": "c"
+        "esp_spi_flash.h": "c",
+        "can.h": "c"
     },
     "python.pythonPath": "C:\\Users\\aziza\\envs\\ml1\\Scripts\\python.exe",
     "git.enabled": true
