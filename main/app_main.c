@@ -48,9 +48,9 @@
 #define ID_SLAVE_STOP_RESP              0x0B0
 #define ID_SLAVE_DATA                   0x0B1
 #define ID_SLAVE_PING_RESP              0x0B2
-#define QUEUE_SIZE_CAN              100
-#define QUEUE_SIZE_SCALE              100
-#define QUEUE_SIZE_RX              50
+#define QUEUE_SIZE_CAN              20
+#define QUEUE_SIZE_SCALE              20
+#define QUEUE_SIZE_RX              20
 xQueueHandle can_queue;
 typedef struct 
    {
@@ -58,7 +58,7 @@ typedef struct
    can_message_t message;    
    } can_with_id;
 
-static const can_filter_config_t f_config =  CAN_FILTER_CONFIG_ACCEPT_ALL();//{.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFFFFF, .single_filter = true};
+static const can_filter_config_t f_config = {.acceptance_code = 0x7E8<<3, .acceptance_mask = 0x3F, .single_filter = true}; //CAN_FILTER_CONFIG_ACCEPT_ALL();//{.acceptance_code = 0x7E8, .acceptance_mask = 0xFFFFFFFF, .single_filter = true};
 static const can_timing_config_t t_config = CAN_TIMING_CONFIG_500KBITS();;
 //Set TX queue length to 0 due to listen only mode
 static const can_general_config_t g_config =  {.mode = CAN_MODE_NORMAL, .tx_io = 21, .rx_io = 22, .clkout_io = CAN_IO_UNUSED, .bus_off_io = CAN_IO_UNUSED, .tx_queue_len = 5, .rx_queue_len = 500, .alerts_enabled =  0x0400 , .clkout_divider = 0, };   // CAN_GENERAL_CONFIG_DEFAULT(TX_GPIO_NUM, RX_GPIO_NUM, CAN_MODE_NORMAL);
@@ -149,8 +149,11 @@ sprintf( str, "{ \"messages\" : [ \n");            strcat( string_final, str);
     for (size_t i = 0; i < QUEUE_SIZE_SCALE; i++)
     {
      if(xQueueReceive(can_queue,&message[i], 0 ) != 0){
-sprintf( str, "{ \"#\": %d", message[i].x );        strcat( string_final, str);
-sprintf( str, ",\"ID\": %d", message[i].message.identifier );        strcat( string_final, str);
+if (i != 0){
+sprintf( str, ",");   strcat( string_final, str);
+}
+// sprintf( str, "{ \"#\": %d", message[i].x );        strcat( string_final, str);
+sprintf( str, "{\"ID\": %d", message[i].message.identifier );        strcat( string_final, str);
 sprintf( str, ",\"length\": %u", message[i].message.data_length_code );        strcat( string_final, str);
 for (uint8_t j = 0; j < message[i].message.data_length_code; j++)
 {
@@ -160,15 +163,12 @@ sprintf( str, ",\"data%u\" : %u", j, message[i].message.data[j]);   strcat( stri
 sprintf( str, "}\n");   strcat( string_final, str);
 
 
-if (i != (QUEUE_SIZE_SCALE-1)){
-sprintf( str, ",");   strcat( string_final, str);
-}
 
 
      }
         /* code */
     }
-    ESP_LOGI(TAG, "finished reading");
+    // ESP_LOGI(TAG, "finished reading");
      
     // const char* resp_str = (const char*) req->user_ctx;
 
@@ -179,16 +179,16 @@ sprintf( str, "]}");            strcat( string_final, str);
 
     
     const char* resp_str = (const char*) string_final;
-    ESP_LOGI(TAG, "begin sending response");
+    // ESP_LOGI(TAG, "begin sending response");
     
     httpd_resp_send(req, resp_str, strlen(resp_str));
-    ESP_LOGI(TAG, "finished sending response");
+    // ESP_LOGI(TAG, "finished sending response");
     free(string_final);
 
     /* After sending the HTTP response the old HTTP request
      * headers are lost. Check if HTTP request headers can be read now. */
     if (httpd_req_get_hdr_value_len(req, "Host") == 0) {
-        ESP_LOGI(TAG, "Request headers lost");
+        // ESP_LOGI(TAG, "Request headers lost");
     }
      xSemaphoreGive(rx_sem);
     return ESP_OK;
@@ -470,19 +470,41 @@ static void can_send_task(void *arg)
 {
 
    
-  static can_message_t tx_message;
-  tx_message.identifier = (uint32_t) 0x7E8U;
-  tx_message.data[0] = (uint8_t) 2U;
-  tx_message.data[1] = (uint8_t) 01U;
-  tx_message.data[2] = (uint8_t) 11U;
-  tx_message.data_length_code = (uint8_t) 8U;
+   can_message_t tx_message[4];
+  tx_message[0].identifier =  0x7DF;
+  tx_message[0].data[0] =  2;
+  tx_message[0].data[1] =  1;
+  tx_message[0].data[2] =  12;
+  tx_message[0].data_length_code =  8;
+
+  tx_message[1].identifier =  0x7DF;
+  tx_message[1].data[0] =  2;
+  tx_message[1].data[1] =  1;
+  tx_message[1].data[2] =  5;
+  tx_message[1].data_length_code =  8;
+
+  tx_message[2].identifier =  0x7DF;
+  tx_message[2].data[0] =  2;
+  tx_message[2].data[1] =  1;
+  tx_message[2].data[2] =  166;
+  tx_message[2].data_length_code =  8;
+  
+  tx_message[3].identifier =  0x7DF;
+  tx_message[3].data[0] =  2;
+  tx_message[3].data[1] =  1;
+  tx_message[3].data[2] =  13;
+  tx_message[3].data_length_code =  8;
   esp_err_t test;
+  uint8_t count =0;
 
 
 while(1){
 
-    test = can_transmit( &tx_message, 0);
+    test = can_transmit( &tx_message[count], 0);
       ESP_LOGI(TAG, "sent OBD query %d ", test);
+    count++;
+    if (count == 4)
+    count = 0;
     vTaskDelay(500 / portTICK_PERIOD_MS);
   
 }
@@ -496,8 +518,8 @@ void app_main()
    
     rx_sem = xSemaphoreCreateBinary();
     can_queue=  xQueueCreate(QUEUE_SIZE_CAN, sizeof(can_with_id) );
-    xTaskCreatePinnedToCore(can_receive_task, "CAN_rx",                QUEUE_SIZE_CAN*1024, NULL, 2, NULL, tskNO_AFFINITY);
-    // xTaskCreatePinnedToCore(can_send_task, "CAN_tx", 1024, NULL, RX_TASK_PRIO, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(can_receive_task, "CAN_rx",                QUEUE_SIZE_CAN*400, NULL, 2, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(can_send_task, "CAN_tx", 4096, NULL, RX_TASK_PRIO, NULL, tskNO_AFFINITY);
 
     //Install and start CAN driver
     ESP_ERROR_CHECK(can_driver_install(&g_config, &t_config, &f_config));
