@@ -67,7 +67,9 @@ static SemaphoreHandle_t rx_sem;
 
 /* --------------------------- Tasks and Functions -------------------------- */
 
-#define EXAMPLE_WIFI_SSID "Abdulaziz_2.4G"
+// #define EXAMPLE_WIFI_SSID "Abdulaziz_2.4G"
+// #define EXAMPLE_WIFI_PASS "0504153443"
+#define EXAMPLE_WIFI_SSID "ESP32"
 #define EXAMPLE_WIFI_PASS "0504153443"
 
 static const char *TAG="APP";
@@ -350,7 +352,7 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
         ESP_LOGI(TAG, "SYSTEM_EVENT_STA_START");
         ESP_ERROR_CHECK(esp_wifi_connect());
         break;
-    case SYSTEM_EVENT_STA_GOT_IP:
+    case SYSTEM_EVENT_AP_STACONNECTED:
         ESP_LOGI(TAG, "STA CONNECTED, STARTING WEB SERVER");
         ESP_LOGI(TAG, "Got IP: '%s'",
                 ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
@@ -384,15 +386,18 @@ static void initialise_wifi(void *arg)
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     wifi_config_t wifi_config = {
-        .sta = {
-             .ssid = EXAMPLE_WIFI_SSID,
+        .ap = {
+            .ssid = EXAMPLE_WIFI_SSID,
+            .ssid_len = strlen(EXAMPLE_WIFI_SSID),
             .password = EXAMPLE_WIFI_PASS,
+            .max_connection = 4,
+            .authmode = WIFI_AUTH_WPA_WPA2_PSK
            
         },
     };
     ESP_LOGI(TAG, "Setting WiFi configuration SSID %s...", wifi_config.sta.ssid);
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 }
 
