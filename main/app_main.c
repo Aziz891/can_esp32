@@ -485,7 +485,7 @@ static void can_send_task(void *arg)
 
        /* data */
    };
-   const struct pid pid_codes[4] = {{.service = 1, .code = 12}, {.service = 1, .code = 13}, {.service = 1, .code = 5}, {.service = 1, .code = 31} };
+   const struct pid pid_codes[4] = {{.service = 1, .code = 5}, {.service = 1, .code = 12}, {.service = 1, .code = 13}, {.service = 1, .code = 16} };
     
    can_message_t tx_message;
   tx_message.identifier =  0x7DF;
