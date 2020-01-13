@@ -446,7 +446,14 @@ static void can_send_task_tp(void *arg)
     uint8_t payload_tp[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
     can_message_t received_message;
 
-    IsoTpShims shims = isotp_init_shims(debug, send_can_tp, NULL);
+    struct pid
+   {
+       uint8_t service;
+       uint8_t code;
+
+       /* data */
+   };
+   const struct pid pid_codes[4] = {{.service = 1, .code = 5}, {.service = 1, .code = 12}, {.service = 1, .code = 13}, {.service = 1, .code = 16} };
     
 
  
