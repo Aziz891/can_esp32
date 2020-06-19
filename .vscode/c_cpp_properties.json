@@ -12,7 +12,7 @@
                 "_UNICODE"
             ],
             "intelliSenseMode": "${default}",
-            "compilerPath": "C:\\Users\\aziza\\.espressif\\tools\\xtensa-esp32-elf\\1.22.0-80-g6c4433a5-5.2.0\\xtensa-esp32-elf\\bin\\xtensa-esp32-elf-gcc.exe"
+            "compilerPath": "C:\\Users\\aziza\\.espressif\\tools\\xtensa-esp32-elf\\esp-2019r2-8.2.0\\xtensa-esp32-elf\\bin\\xtensa-esp32-elf-gcc"
         }
     ],
     "version": 4
